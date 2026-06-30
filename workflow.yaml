@@ -1,55 +1,27 @@
-# workflow.yaml
-name: KassenzettelWorkflow
+# Lobster workflow definition (loaded by OpenClaw via loadWorkflowFile)
+name: kassenzettel-workflow
+description: Kassenzettel-OCR-Pipeline - Bild zu Text zu strukturierten Daten zu SQLite
 
-agents:
-  - name: OCRScanner
-    type: python
-    module: agents.ocr_scanner
-    class: OCRScanner
-    inputs:
-      - name: image_path
-        type: string
-    outputs:
-      - name: raw_text
-        type: string
+args:
+  image_path:
+    description: "Pfad zum Kassenzettel-Bild"
 
-  - name: DataParser
-    type: python
-    module: agents.data_parser
-    class: DataParser
-    inputs:
-      - name: raw_text
-        type: string
-    outputs:
-      - name: parsed_data
-        type: dict
+steps:
+  - id: ocr
+    run: >-
+      python3 -m agents.run_step agents.ocr_scanner OCRScanner
+      --input "{\"image_path\": \"${args.image_path}\"}"
+      --arg-key image_path
+      --output /tmp/zettelscanner_ocr.json
 
-  - name: DatabaseWriter
-    type: python
-    module: agents.database_writer
-    class: DatabaseWriter
-    inputs:
-      - name: parsed_data
-        type: dict
-    outputs:
-      - name: status
-        type: dict
+  - id: parse
+    run: >-
+      python3 -m agents.run_step agents.data_parser DataParser
+      --input-file /tmp/zettelscanner_ocr.json
+      --arg-key raw_text
+      --output /tmp/zettelscanner_parsed.json
 
-workflow:
-  - step: OCRScanner
-    next: DataParser
-    input_mapping:
-      image_path: image_path
-    output_mapping:
-      raw_text: raw_text
-
-  - step: DataParser
-    next: DatabaseWriter
-    input_mapping:
-      raw_text: raw_text
-    output_mapping:
-      parsed_data: parsed_data
-
-  - step: DatabaseWriter
-    input_mapping:
-      parsed_data: parsed_data
+  - id: write_db
+    run: >-
+      python3 -m agents.run_step agents.database_writer DatabaseWriter
+      --input-file /tmp/zettelscanner_parsed.json
